@@ -1,0 +1,73 @@
+openapi: 3.0.3
+info:
+  title: AGORA HACKATON 2022 test API
+  description: |-
+    AGORA HACKATON 2022 test API. Кейс 1
+  version: 1.0.2
+servers:
+  - url: http://localhost:8100/
+paths:
+  /match_products:
+    post:
+      summary: Match products with the reference
+      description: Match products with the reference
+      operationId: matchProducts
+      requestBody:
+        description: Match products with the reference
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/products'
+        required: true
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/matched-products'          
+        '405':
+          description: Invalid input
+components:
+  schemas:
+    product:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          example: "0007302f2fe1d54d"
+        reference_id:
+          type: string
+          example: "f497219eb0077f84"
+        name:
+          type: string
+          example: "Классическая сплит-система ROYAL CLIMA PANDORA RC-PD28HN, для комнат до 28 кв.метра, настенный кондиционер для дома/офиса, комплект"
+        props:
+          type: array
+          items:
+            type: string
+          example: ["Класс  энергоэффективности\tA", "Мощность  кондиционера\t9 BTU"]
+        is_reference:
+          type: boolean
+          example: false
+    products:
+      type: array
+      items:
+        $ref: '#/components/schemas/product'
+    matched-product:
+      type: object
+      required:
+        - product_id
+      properties:
+        id:
+          type: string
+          example: "0007302f2fe1d54d"
+        reference_id:
+          type: string
+          example: "f497219eb0077f84"
+    matched-products:
+      type: array
+      items:
+        $ref: '#/components/schemas/matched-product'

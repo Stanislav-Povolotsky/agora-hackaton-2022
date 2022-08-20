@@ -1,0 +1,1 @@
+docker run -it --rm -p8100:8100 agora
