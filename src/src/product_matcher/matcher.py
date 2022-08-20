@@ -1,9 +1,11 @@
-if __name__ == '__main__':
+try:
   from loader import *
-else:
+  from ml_matcher import *
+except:
   from .loader import *
+  from .ml_matcher import *
 
-def match_product(product):
+def match_product__intersections(product):
   best = None
   best_matches = 0
   #pnt = product.name_tokens
@@ -19,6 +21,31 @@ def match_product(product):
       best_matches = len(i)
   res = best
   return res
+
+def match_product__product_tags_weight(product):
+  best = None
+  best_weight = 0
+  #pnt = product.name_tokens
+  pnt = product.get_tags()
+
+  refs = get_items_refs()
+  for ref in refs.values():
+    #rpnt = ref.name_tokens
+    rpnt = ref.get_tags()
+    its = rpnt.intersection(pnt)
+    weight = 0.0
+    for tag in its:
+      weight += ref.tags_weight[tag]
+    if(weight > best_weight):
+      best = ref
+      best_weight = weight
+  res = best
+  return res
+
+def match_product(product):
+  return match_product__ml1(product)
+  #return match_product__intersections(product)
+  #return match_product__product_tags_weight(product)
 
 def match_products(products_to_match, test_mode = False):
   res = []
@@ -40,7 +67,7 @@ if __name__ == '__main__':
   with open(os.path.join(data_folder, "agora_hack_products.products.json"), "rt", encoding="utf8") as f:
     products = json.load(f)
   t_start = time.time()
-  matched = match_products(products, test_mode = True)
+  matched = match_products(products[:300], test_mode = True)
   t_end = time.time()
 
   n_total = len(matched)

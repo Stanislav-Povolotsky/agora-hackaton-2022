@@ -45,6 +45,8 @@ class CItem:
       obj['name_tokens'] = self.name_tokens
     if(hasattr(self, 'props_norm')):
       obj['props_norm'] = self.props_norm
+    if(hasattr(self, 'tags_weight')):
+      obj['tags_weight'] = self.tags_weight
     obj['tags'] = self.get_tags()
     return obj
 
@@ -64,7 +66,7 @@ class CItem:
     return self.tags_cache
 
   def __repr__(self):
-    return "%s%s (%s)" % (self.p_id, "[REF]" if self.is_ref else "", self.name)
+    return "%s%s (%s)" % (self.pid, "[REF]" if self.is_ref else "", self.name)
 
 def load_items_json_full(s):
   items = json.loads(s)
@@ -190,7 +192,7 @@ def matches_loader(generate_debug_files = False):
             if(cm):
               g_props.add(p_name, cm)
 
-  # Шаг 2: обрабатываем props остальных эталоно
+  # Шаг 2: обрабатываем props остальных эталонов
   for item in items_refs.values():
     for p in item.props:
       (p_name, p_values) = extract_eprops(p)
@@ -202,18 +204,74 @@ def matches_loader(generate_debug_files = False):
     with open(os.path.join(data_folder, "res.found-props.json"), "wt", encoding="utf8") as f:
       json.dump(g_props.props, f, ensure_ascii=False, indent=4, sort_keys=True, cls=SetEncoder)
   
-  # Шаг 3: обрабатываем все остальные props
-  """
-  for item in items_all:
-    for p in item.props:
-      (p_name, p_values) = extract_eprops(p)
-      if(not g_props.have(p_name)):
-        #print("No such prop: ", (p_name, p_values))
-        pass
-  """
-
   for item in items_all:
     enrich_item(item)
+
+  # Считаем уникальность тэгов для каждого продукта
+  tag_stats_all = {}           # tag => count                    (общее количество каждых тэгов)
+  tag_stats_product = {}       # product => {tag => count}       (количество каждого тега для каждого продукта)
+  name_tag_stats_product = {}  # product => {name_tag => count}  (количество каждого тега для каждого продукта (только для именных тэгов))
+  product_count = {}           # pid => count                    (сколько продуктов каждого типа)
+  tag_products = {}            # tag => set(pids)                (список продуктов для каждого тэга)
+
+  for item in items_all:
+    item_name_tags = set(item.name_tokens)
+    rid = item.pid if item.is_ref else item.rid
+    if not(rid in product_count): product_count[rid] = 0
+    #print(item)
+    item_ref = items_refs[rid]
+
+    product_count[rid] += 1
+    if not(rid in tag_stats_product): tag_stats_product[rid] = {}
+    tag_stats_product_cur = tag_stats_product[rid]
+    if not(rid in name_tag_stats_product): name_tag_stats_product[rid] = {}
+    name_tag_stats_product_cur = name_tag_stats_product[rid]
+    for tag in item.get_tags():
+      if not(tag in tag_stats_product_cur): tag_stats_product_cur[tag] = 0
+      tag_stats_product_cur[tag] += 1
+      if(tag in item_name_tags):
+        if not(tag in name_tag_stats_product_cur): name_tag_stats_product_cur[tag] = 0
+        name_tag_stats_product_cur[tag] += 1
+      if not(tag in tag_stats_all): tag_stats_all[tag] = 0
+      tag_stats_all[tag] += 1
+      if not(tag in tag_products): tag_products[tag] = set()
+      tag_products[tag].add(rid)
+
+  # Проставляем веса каждого тэго для каждого продукта
+  name_tag_base_weight = 1.0
+  prop_tag_base_weight = 1.0
+  ref_tag_base_coef = 2.0 # дополнительный коффициент для тэгов, принадлежащий референсному товару
+  for rid,p_count in product_count.items():
+    item_ref = items_refs[rid]
+    item_ref_tags = set(item_ref.get_tags())
+    if(not hasattr(item_ref, 'tags_weight')): item_ref.tags_weight = {}
+    tag_stats_product_cur = tag_stats_product[rid]
+    name_tag_stats_product_cur = name_tag_stats_product[rid]
+
+    name_tag_count = len(name_tag_stats_product_cur)
+    total_tag_count = len(tag_stats_product_cur)
+    prop_tag_count = total_tag_count - name_tag_count
+
+    name_tag_cur_base_weight = name_tag_base_weight / name_tag_count
+    prop_tag_cur_base_weight = prop_tag_base_weight / prop_tag_count
+    for tag, t_count in tag_stats_product_cur.items():
+      # Вычисляем вес тэга, как количество таких тэгов найденных ранее в продуктах этого типа / количество ссылок на продукт этого типа / количество продуктов с таким тэгом
+      n_products_with_this_tag = len(tag_products[tag])
+      tag_weight_product = t_count / p_count / n_products_with_this_tag
+      #tag_weight_product = t_count / p_count
+
+      # Умножаем на базовый вес конкретного тэга для продукта
+      is_name_tag = tag in name_tag_stats_product_cur
+      cur_tag_cur_base_weight = name_tag_cur_base_weight if is_name_tag else prop_tag_cur_base_weight
+
+      is_ref_tag = tag in item_ref_tags
+      ref_tag_coef = ref_tag_base_coef if is_ref_tag else 1.0
+      #ref_tag_coef = 1.0
+
+      tag_weight_product = tag_weight_product * cur_tag_cur_base_weight  * ref_tag_coef
+
+      item_ref.tags_weight[tag] = tag_weight_product
+      
   #print("Added props:", len(g_props.props))
 
   if(generate_debug_files):
