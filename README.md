@@ -1,13 +1,13 @@
 # agora-hackaton-2022
 
-# Запуск
+# Р—Р°РїСѓСЃРє
 
-Для запуска микросервиса необходимо выполнить команду 'docker-compose up', находясь в каталоге /src
+Р”Р»СЏ Р·Р°РїСѓСЃРєР° РјРёРєСЂРѕСЃРµСЂРІРёСЃР° РЅРµРѕР±С…РѕРґРёРјРѕ РІС‹РїРѕР»РЅРёС‚СЊ РєРѕРјР°РЅРґСѓ 'docker-compose up', РЅР°С…РѕРґСЏСЃСЊ РІ РєР°С‚Р°Р»РѕРіРµ /src
 
-# Презентация:
+# РџСЂРµР·РµРЅС‚Р°С†РёСЏ:
 
-[docs/AGORA HACK - 1 КЕЙС - 100zers.pptx](https://github.com/Stanislav-Povolotsky/agora-hackaton-2022/blob/main/docs/AGORA%20HACK%20-%201%20%D0%9A%D0%95%D0%99%D0%A1%20-%20100zers.pptx)
+[docs/AGORA HACK - 1 РљР•Р™РЎ - 100zers.pptx](https://github.com/Stanislav-Povolotsky/agora-hackaton-2022/blob/main/docs/AGORA%20HACK%20-%201%20%D0%9A%D0%95%D0%99%D0%A1%20-%20100zers.pptx)
 
-# Хакатон
+# РҐР°РєР°С‚РѕРЅ
 
-Подробнее о хакатоне: https://hackathon.agora.ru/, https://www.zavodit.ru/ru/calendar/event/17
+РџРѕРґСЂРѕР±РЅРµРµ Рѕ С…Р°РєР°С‚РѕРЅРµ: https://hackathon.agora.ru/, https://www.zavodit.ru/ru/calendar/event/17
