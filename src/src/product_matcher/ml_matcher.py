@@ -75,7 +75,7 @@ def match_products__ml1(products_group):
     propability = out[i][idx_max]
     if(predicted_class and (predicted_class in items_refs)):
       res = items_refs[predicted_class]
-      print("Predicted class: %s with propability %.04f" % (res.pid, propability))
+      #print("Predicted class: %s with propability %.04f" % (res.pid, propability))
       #print("In row: %s" % (",".join([str(x) for x in x_products[i]])))
       #print("Out row: %s" % (",".join([str(x) for x in out[i]])))
       res.propability = propability

@@ -210,7 +210,7 @@ import random
 import json
 
 def save_model(file_base_name, model):
-  with open(os.path.join(data_folder, "%s.model.json" % file_base_name), "wt") as f: print(model.to_json(), file=f, end="")
+  with open(os.path.join(data_folder, "%s.model.json" % file_base_name), "wt", encoding="utf8") as f: print(model.to_json(), file=f, end="")
   with open(os.path.join(data_folder, "%s.classes.%s.json" % (file_base_name, 'tags')), "wt", encoding="utf8") as f: json.dump(all_tags_list, f, ensure_ascii=False, indent=4)
   with open(os.path.join(data_folder, "%s.classes.%s.json" % (file_base_name, 'refs')), "wt", encoding="utf8") as f: json.dump(all_refs_list, f, ensure_ascii=False, indent=4)
   model.save(os.path.join(data_folder, '%s.weights.h5' % file_base_name))
@@ -218,7 +218,7 @@ def save_model(file_base_name, model):
 # Loading network and weights and testing it
 def load_model(file_base_name):
   file_base_name = os.path.join(data_folder, file_base_name)
-  with open(file_base_name + ".model.json", "rt") as f: model_json = f.read()
+  with open(file_base_name + ".model.json", "rt", encoding="utf8") as f: model_json = f.read()
   model = tf.keras.models.model_from_json(model_json)
   model.load_weights(file_base_name + ".weights.h5")
   with open(file_base_name + ".classes.%s.json" % 'tags' , "rt", encoding="utf8") as f: all_tags_list_ = json.load(f)
@@ -246,7 +246,7 @@ input_len = x_train.shape[1]
 output_len = y_train.shape[1]
 model = keras.Sequential([
     Flatten(input_shape=(input_len, 1)),
-    Dropout(0.2),
+    Dropout(0.5), # отбрасываем часть входных данных (не все тэги всегда присутствуют в тестовых продуктах, эмулируем это)
     Dense(800, activation='relu'),
     Dropout(0.2),
     Dense(output_len, activation='sigmoid')
@@ -266,13 +266,23 @@ else:
   model.compile(optimizer=optimizer, loss=loss, metrics = metrics)
 
 # Само обучение
+n_time_to_stop = 0
+prev_best = 0
+train_stop_limit = 5
 for i in range(100):
   try:
     history = model.fit(x_train, y_train, batch_size=16, epochs=10, validation_data=(x_test, y_test))
     #print(history.history)
     acc = history.history['accuracy']
-    if(acc[-1] >= 0.999): break
-    if(acc[0] > acc[-1]): print("Time to stop?")
+    if(acc[-1] >= 0.998): break
+    if(acc[-1] <= prev_best): 
+      print("Time to stop?")
+      n_time_to_stop += 1
+    else:
+      n_time_to_stop = 0
+      prev_best = acc[-1]
+    if(n_time_to_stop > train_stop_limit):
+      break
   except KeyboardInterrupt:
     # User interrupt the program with ctrl+c
     break
