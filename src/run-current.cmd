@@ -1,1 +1,1 @@
-docker run -it --rm -v%~dp0\src:/code/app -p8100:8100 agora
+docker run -it --rm -v%~dp0\src:/code/app -p8100:8100 agora-products-100zers

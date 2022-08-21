@@ -1,1 +1,1 @@
-docker build -t agora -f Dockerfile .
+docker build -t agora-products-100zers -f Dockerfile .

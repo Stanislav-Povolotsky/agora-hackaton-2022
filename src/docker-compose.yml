@@ -1,0 +1,6 @@
+version: "3"
+services:
+  agora-products-100zers:
+    build: ./
+    ports:
+      - 8100:8100

@@ -2,6 +2,7 @@
 import time
 import re
 import os
+import sys
 
 script_folder = os.path.dirname(os.path.realpath(__file__))
 data_folder = os.path.join(script_folder, 'data')
@@ -106,42 +107,63 @@ class SetEncoder(json.JSONEncoder):
 
 g_props = CPropsMgr()
 
-re_replace_space = re.compile("[ \t\r\n()\[\].\-+/,.]+")
+re_replace_space = re.compile("[ \t\r\n()\[\].\-+/,.»«'\"]+")
 re_list_splitter = re.compile("[^;,]+")
 
 # lowercase, удаляем повторы символов, все пробельные символы заменяем на один пробел
 # удаляем скобки и другие спец. символы
 def normalize_str(s):
   s = re_replace_space.sub(' ', s)
+  s = s.replace('ё', 'е')
   s = s.strip()
   s = s.lower()
   return s
 
+g_auto_replacements = {}
+def replace_word(s):
+  global g_auto_replacements
+  if(s in g_auto_replacements): 
+    #print("Replaced %s to %s" % (s, g_auto_replacements[s]))
+    s = g_auto_replacements[s]
+  return s
+
 def extract_eprops(sprop):
+  #print('sprop', sprop)
   spropn = normalize_str(sprop)
-  tkn = spropn.split(' ')
+  tkn = list([replace_word(w) for w in spropn.split(' ')])
   parts = 1
+  used_parts = 1
   p_name = tkn[0]
   p_values = set()
+  if(p_name.isdigit() and len(tkn) >= 2):
+    cpart = " ".join(tkn[:parts + 1])
+    parts += 1
+    used_parts += 1
   while((parts + 1) < len(tkn)):
     cpart = " ".join(tkn[:parts + 1])
     if(g_props.have(cpart)):
       p_name = cpart
+      used_parts = parts + 1
     parts += 1
-  s = spropn[len(p_name):]
+  #print('parts', used_parts)
+  s = " ".join(tkn[used_parts:])
+  #print('s', s)
+  #s = spropn[len(p_name):]
   m = re_list_splitter.findall(s)
   if(m):
+    #print('m', m)
     for cm in m:
       cm = normalize_str(cm)
       if(cm):
         p_values.add(cm)
+  #print(sprop, "\n\t", "'%s'" % p_name, "\n\t", p_values)
   return (p_name, p_values)
 
 
 def enrich_item(item):
   n = item.name
   n = normalize_str(n)
-  ntokens = n.split(' ')
+  ntokens = list([replace_word(w) for w in n.split(' ')])
   #ntokens = list([t for t in ntokens if len(t) > 1])
   ntokens = set(ntokens)
   item.name_tokens = ntokens
@@ -153,12 +175,22 @@ def enrich_item(item):
 
 g_items_refs = []
 g_items_all = []
+
 def get_items_refs():
   return g_items_refs
 
+def dbg_get_items_all():
+  return g_items_all
+
 def matches_loader(generate_debug_files = False):
+  global g_auto_replacements
+
   with open(os.path.join(data_folder, "agora_hack_products.json"), "rt", encoding="utf8") as f:
     json_s = f.read()
+
+  if(os.path.exists(os.path.join(data_folder, "auto-replacements.json"))):
+    with open(os.path.join(data_folder, "auto-replacements.json"), "rt", encoding="utf8") as f:
+      g_auto_replacements = json.load(f)
 
   items_products = []
   items_refs = {}
@@ -207,70 +239,72 @@ def matches_loader(generate_debug_files = False):
   for item in items_all:
     enrich_item(item)
 
-  # Считаем уникальность тэгов для каждого продукта
-  tag_stats_all = {}           # tag => count                    (общее количество каждых тэгов)
-  tag_stats_product = {}       # product => {tag => count}       (количество каждого тега для каждого продукта)
-  name_tag_stats_product = {}  # product => {name_tag => count}  (количество каждого тега для каждого продукта (только для именных тэгов))
-  product_count = {}           # pid => count                    (сколько продуктов каждого типа)
-  tag_products = {}            # tag => set(pids)                (список продуктов для каждого тэга)
-
-  for item in items_all:
-    item_name_tags = set(item.name_tokens)
-    rid = item.pid if item.is_ref else item.rid
-    if not(rid in product_count): product_count[rid] = 0
-    #print(item)
-    item_ref = items_refs[rid]
-
-    product_count[rid] += 1
-    if not(rid in tag_stats_product): tag_stats_product[rid] = {}
-    tag_stats_product_cur = tag_stats_product[rid]
-    if not(rid in name_tag_stats_product): name_tag_stats_product[rid] = {}
-    name_tag_stats_product_cur = name_tag_stats_product[rid]
-    for tag in item.get_tags():
-      if not(tag in tag_stats_product_cur): tag_stats_product_cur[tag] = 0
-      tag_stats_product_cur[tag] += 1
-      if(tag in item_name_tags):
-        if not(tag in name_tag_stats_product_cur): name_tag_stats_product_cur[tag] = 0
-        name_tag_stats_product_cur[tag] += 1
-      if not(tag in tag_stats_all): tag_stats_all[tag] = 0
-      tag_stats_all[tag] += 1
-      if not(tag in tag_products): tag_products[tag] = set()
-      tag_products[tag].add(rid)
-
-  # Проставляем веса каждого тэго для каждого продукта
-  name_tag_base_weight = 1.0
-  prop_tag_base_weight = 1.0
-  ref_tag_base_coef = 2.0 # дополнительный коффициент для тэгов, принадлежащий референсному товару
-  for rid,p_count in product_count.items():
-    item_ref = items_refs[rid]
-    item_ref_tags = set(item_ref.get_tags())
-    if(not hasattr(item_ref, 'tags_weight')): item_ref.tags_weight = {}
-    tag_stats_product_cur = tag_stats_product[rid]
-    name_tag_stats_product_cur = name_tag_stats_product[rid]
-
-    name_tag_count = len(name_tag_stats_product_cur)
-    total_tag_count = len(tag_stats_product_cur)
-    prop_tag_count = total_tag_count - name_tag_count
-
-    name_tag_cur_base_weight = name_tag_base_weight / name_tag_count
-    prop_tag_cur_base_weight = prop_tag_base_weight / prop_tag_count
-    for tag, t_count in tag_stats_product_cur.items():
-      # Вычисляем вес тэга, как количество таких тэгов найденных ранее в продуктах этого типа / количество ссылок на продукт этого типа / количество продуктов с таким тэгом
-      n_products_with_this_tag = len(tag_products[tag])
-      tag_weight_product = t_count / p_count / n_products_with_this_tag
-      #tag_weight_product = t_count / p_count
-
-      # Умножаем на базовый вес конкретного тэга для продукта
-      is_name_tag = tag in name_tag_stats_product_cur
-      cur_tag_cur_base_weight = name_tag_cur_base_weight if is_name_tag else prop_tag_cur_base_weight
-
-      is_ref_tag = tag in item_ref_tags
-      ref_tag_coef = ref_tag_base_coef if is_ref_tag else 1.0
-      #ref_tag_coef = 1.0
-
-      tag_weight_product = tag_weight_product * cur_tag_cur_base_weight  * ref_tag_coef
-
-      item_ref.tags_weight[tag] = tag_weight_product
+  bUseTagWeights = False
+  if(bUseTagWeights):
+    # Считаем уникальность тэгов для каждого продукта
+    tag_stats_all = {}           # tag => count                    (общее количество каждых тэгов)
+    tag_stats_product = {}       # product => {tag => count}       (количество каждого тега для каждого продукта)
+    name_tag_stats_product = {}  # product => {name_tag => count}  (количество каждого тега для каждого продукта (только для именных тэгов))
+    product_count = {}           # pid => count                    (сколько продуктов каждого типа)
+    tag_products = {}            # tag => set(pids)                (список продуктов для каждого тэга)
+  
+    for item in items_all:
+      item_name_tags = set(item.name_tokens)
+      rid = item.pid if item.is_ref else item.rid
+      if not(rid in product_count): product_count[rid] = 0
+      #print(item)
+      item_ref = items_refs[rid]
+  
+      product_count[rid] += 1
+      if not(rid in tag_stats_product): tag_stats_product[rid] = {}
+      tag_stats_product_cur = tag_stats_product[rid]
+      if not(rid in name_tag_stats_product): name_tag_stats_product[rid] = {}
+      name_tag_stats_product_cur = name_tag_stats_product[rid]
+      for tag in item.get_tags():
+        if not(tag in tag_stats_product_cur): tag_stats_product_cur[tag] = 0
+        tag_stats_product_cur[tag] += 1
+        if(tag in item_name_tags):
+          if not(tag in name_tag_stats_product_cur): name_tag_stats_product_cur[tag] = 0
+          name_tag_stats_product_cur[tag] += 1
+        if not(tag in tag_stats_all): tag_stats_all[tag] = 0
+        tag_stats_all[tag] += 1
+        if not(tag in tag_products): tag_products[tag] = set()
+        tag_products[tag].add(rid)
+  
+    # Проставляем веса каждого тэго для каждого продукта
+    name_tag_base_weight = 1.0
+    prop_tag_base_weight = 1.0
+    ref_tag_base_coef = 2.0 # дополнительный коффициент для тэгов, принадлежащий референсному товару
+    for rid,p_count in product_count.items():
+      item_ref = items_refs[rid]
+      item_ref_tags = set(item_ref.get_tags())
+      if(not hasattr(item_ref, 'tags_weight')): item_ref.tags_weight = {}
+      tag_stats_product_cur = tag_stats_product[rid]
+      name_tag_stats_product_cur = name_tag_stats_product[rid]
+  
+      name_tag_count = len(name_tag_stats_product_cur)
+      total_tag_count = len(tag_stats_product_cur)
+      prop_tag_count = total_tag_count - name_tag_count
+  
+      name_tag_cur_base_weight = name_tag_base_weight / name_tag_count
+      prop_tag_cur_base_weight = prop_tag_base_weight / prop_tag_count
+      for tag, t_count in tag_stats_product_cur.items():
+        # Вычисляем вес тэга, как количество таких тэгов найденных ранее в продуктах этого типа / количество ссылок на продукт этого типа / количество продуктов с таким тэгом
+        n_products_with_this_tag = len(tag_products[tag])
+        tag_weight_product = t_count / p_count / n_products_with_this_tag
+        #tag_weight_product = t_count / p_count
+  
+        # Умножаем на базовый вес конкретного тэга для продукта
+        is_name_tag = tag in name_tag_stats_product_cur
+        cur_tag_cur_base_weight = name_tag_cur_base_weight if is_name_tag else prop_tag_cur_base_weight
+  
+        is_ref_tag = tag in item_ref_tags
+        ref_tag_coef = ref_tag_base_coef if is_ref_tag else 1.0
+        #ref_tag_coef = 1.0
+  
+        tag_weight_product = tag_weight_product * cur_tag_cur_base_weight  * ref_tag_coef
+  
+        item_ref.tags_weight[tag] = tag_weight_product
       
   #print("Added props:", len(g_props.props))
 
@@ -298,6 +332,12 @@ def matches_loader(generate_debug_files = False):
   global g_items_all
   g_items_all = items_all
 
-matches_loader(generate_debug_files = (__name__ == '__main__'))
+if(True):
+  print("Loading base model... ", end = "", flush = True)
+  generate_debug_files = (__name__ == '__main__')
+  generate_debug_files = generate_debug_files or ('ml_train.py' in sys.argv[0])
+  matches_loader(generate_debug_files = generate_debug_files)
+  print("Done.")
+
 if __name__ == '__main__':
   pass

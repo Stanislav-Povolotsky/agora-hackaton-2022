@@ -53,6 +53,7 @@ def main():
   app = aiohttp.web.Application(client_max_size = 1024 * 1024 * 100)
   app.add_routes([aiohttp.web.get('/', index),
                   aiohttp.web.post('/match_products', handle_match_products),])
+  app.router.add_static('/', path=os.path.join(script_folder, 'static/'), name='root')
   app.router.add_static('/static/', path=os.path.join(script_folder, 'static/'), name='static')
   app.router.add_static('/dist/', path=os.path.join(script_folder, 'static/'), name='dist')
   app.on_response_prepare.append(on_prepare_append_allow_cors)
